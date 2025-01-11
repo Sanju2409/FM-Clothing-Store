@@ -666,7 +666,128 @@ async function createOrders() {
     }
 }
 
+
+async function prepareInventoryData() {
+  try {
+    // Connect to the database
+    const db = await connectToDatabase();
+
+    // Fetch product IDs along with their corresponding branches
+    const productBranches = await db.collection("products").aggregate([
+      {
+        $project: {
+          productId: 1,  // Include productId
+          branch: 1,     // Include branches where product is available
+          _id: 0         // Exclude the MongoDB default _id field
+        }
+      }
+    ]).toArray();
+
+    // Function to generate a random date between the given start and end dates
+    function generateRandomDate(start, end) {
+      const randomTime = start.getTime() + Math.random() * (end.getTime() - start.getTime());
+      return new Date(randomTime); // Convert random time to a Date object
+    }
+
+    // Define the range for the random dates (last 6 months)
+    const sixMonthsAgo = new Date();
+    sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);  // 6 months ago
+    const currentDate = new Date(); // Current date
+
+    // Prepare the inventory data by combining product ID and branch with stock levels and random update dates
+    const inventoryData = productBranches.flatMap(({ productId, branch }) => {
+      return branch.map(branchName => ({
+        productId,              // Product ID
+        branch: branchName,     // Branch name where the product is available
+        stock: Math.floor(Math.random() * 91) + 10,  // Random stock count between 10 and 100
+        lastUpdated: generateRandomDate(sixMonthsAgo, currentDate) // Random date within the last 6 months
+      }));
+    });
+
+    // Log the prepared inventory data for verification
+    console.log("Prepared Inventory Data:", inventoryData);
+
+    // Insert the generated inventory data into the "inventory" collection
+    const result = await db.collection("inventory").insertMany(inventoryData);
+
+    // Log success message showing how many records were inserted
+    console.log(`${result.insertedCount} inventory records inserted successfully.`);
+  } catch (error) {
+    // Handle any errors that occur during the process
+    console.error("Error preparing inventory data:", error.message);
+  }
+}
+
+
+
+async function createCustomerReview() {
+  try {
+    // Step 1: Establish a connection to the database
+    const db = await connectToDatabase();
+    console.log("Successfully connected to the database.");
+
+    // Step 2: Fetch productId and customerId from the 'orders' collection
+    const orderData = await db.collection("orders").aggregate([
+      {
+        // Match orders that have products (this ensures only orders with products are processed)
+        $match: { "products.0": { $exists: true } }
+      },
+      {
+        // Project only the relevant fields (customerId and products)
+        $project: {
+          customerId: 1,  // Include customerId
+          products: 1,    // Include the products array
+          _id: 0          // Exclude _id field from the result
+        }
+      }
+    ]).toArray();
+
+    console.log("Fetched order data:", orderData);
+
+    // Step 3: Generate review data for each product in the order
+    const reviews = orderData.flatMap(({ customerId, products }) => {
+      // For each product in the order, generate a review
+      return products.map(({ productId }) => {
+        // Ensure that productId is valid before generating review
+        if (!productId) {
+          console.log(`Skipping order for customer ${customerId} with missing productId`);
+          return null; // Skip this review if productId is missing
+        }
+
+        return {
+          reviewId: `R${Math.floor(Math.random() * 10000)}`,  // Generate a random reviewId
+          productId: productId,                               // Use the valid productId
+          customerId: customerId,                             // Use the valid customerId
+          rating: (Math.random() * 5).toFixed(1),              // Random rating between 0 and 5
+          reviewText: "This product is amazing! Highly recommended.",  // Sample review text
+          reviewDate: new Date().toISOString().split('T')[0]   // Get today's date in YYYY-MM-DD format
+        };
+      }).filter(review => review !== null); // Filter out any invalid reviews where productId was missing
+    });
+
+    console.log("Generated Reviews:", reviews);
+
+    // Step 4: Insert the generated review data into the 'reviews' collection
+    if (reviews.length > 0) {
+      const result = await db.collection("reviews").insertMany(reviews);
+      console.log(`${result.insertedCount} reviews were successfully inserted into the database!`);
+    } else {
+      console.log("No valid reviews to insert.");
+    }
+
+  } catch (error) {
+    // Step 5: Catch and log any errors during the process
+    console.error("An error occurred while creating customer reviews:", error.message);
+  }
+}
+
+
+
+
 createProducts();
 createBranch();
 createCustomer();
 createOrders();
+
+prepareInventoryData();
+createCustomerReview();
