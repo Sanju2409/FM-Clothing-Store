@@ -896,6 +896,77 @@ async function createWishlistCollection() {
 }
 
 
+// Function to generate a random date between a start and end date
+function generateRandomDate(start, end) {
+  // Calculate a random time within the provided range
+  const randomTime = start.getTime() + Math.random() * (end.getTime() - start.getTime());
+  
+  // Return the random date in a human-readable format (YYYY-MM-DD)
+  return new Date(randomTime).toISOString().split("T")[0];
+}
+
+async function createDiscountsCollection() {
+  try {
+    // Step 1: Establish a connection to the database
+    const db = await connectToDatabase();
+
+    // Step 2: Check if any discounts already exist in the collection
+    const discountsCount = await db.collection("discounts").countDocuments();
+    if (discountsCount > 0) {
+      console.log("The discounts collection already has data. No need to insert more.");
+      return; // Exit early if discounts data already exists
+    }
+
+    // Step 3: Fetch all products from the database (only productId and name)
+    const products = await db.collection("products").find({}, { projection: { productId: 1, name: 1, _id: 0 } }).toArray();
+    if (products.length === 0) {
+      console.log("It seems there are no products in the products collection. Please add products first.");
+      return; // Exit if no products are found
+    }
+
+    // Step 4: Determine how many products will have discounts
+    const percentageToDiscount = 0.3; // 30% of the products will have discounts
+    const totalDiscountedProducts = Math.ceil(products.length * percentageToDiscount);
+
+    // Randomly shuffle the products and select a subset for discounts
+    const discountedProducts = products
+      .sort(() => Math.random() - 0.5) // Shuffle the products randomly
+      .slice(0, totalDiscountedProducts); // Select the first N products for discounts
+
+    // Step 5: Prepare the discount data for each selected product
+    const discountsData = discountedProducts.map(product => {
+      // Generate a random discount percentage between 10% and 30%
+      const randomDiscount = Math.floor(Math.random() * 21) + 10;
+
+      // Generate random start and end dates for the discount within January 2025
+      const startDate = generateRandomDate(new Date(2025, 0, 1), new Date(2025, 0, 15));
+      const endDate = generateRandomDate(new Date(2025, 0, 16), new Date(2025, 0, 31));
+
+      // Return the discount details for this product
+      return {
+        discountId: `D${Math.floor(Math.random() * 10000)}`, // Generate a random unique discount ID
+        productId: product.productId,
+        productName: product.name, // Include the product name for easier understanding
+        discountPercentage: randomDiscount,
+        startDate: startDate,
+        endDate: endDate,
+        description: `Enjoy ${randomDiscount}% off on ${product.name} (Product ID: ${product.productId})`
+      };
+    });
+
+    // Step 6: Insert the generated discounts into the database
+    const result = await db.collection("discounts").insertMany(discountsData);
+
+    // Step 7: Log a success message with the number of discounts inserted
+    console.log(`${result.insertedCount} discounts successfully added to the database.`);
+
+  } catch (error) {
+    // If an error occurs, log the error message
+    console.error("Oops, something went wrong while creating the discounts collection:", error.message);
+  }
+}
+
+
 
 
 
@@ -907,3 +978,4 @@ createOrders();
 prepareInventoryData();
 createCustomerReview();
 createWishlistCollection();
+createDiscountsCollection();

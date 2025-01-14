@@ -415,10 +415,62 @@ async function FirstQuery(){
           ]).toArray();  // Fetch the result as an array
       
           // Step 4: Output the list of top customers
-          console.log("Top Customers Based on Top-Rated Products:", topCustomers);
+          //console.log("Top Customers Based on Top-Rated Products:", topCustomers);
         
       
- 
+          //Find all discounted products with their discount details, stock levels, and branches where they are available
+
+         
+              
+          
+              //Use aggregation to combine data from discounts, products, and inventory collections
+              const result = await db.collection("discounts").aggregate([
+                // Match products in the discounts collection with their details in the products collection
+                {
+                  $lookup: {
+                    from: "products",             // Connect with the "products" collection
+                    localField: "productId",      // Match using the productId from the discounts collection
+                    foreignField: "productId",    // Match using the productId from the products collection
+                    as: "productDetails"          // Store the matched product details
+                  }
+                },
+                // Transform productDetails from an array into a single object for easier access
+                { $unwind: "$productDetails" },
+          
+                // Match discounted products with their stock and branch details from the inventory collection
+                {
+                  $lookup: {
+                    from: "inventory",            // Connect with the "inventory" collection
+                    localField: "productId",      // Match using the productId from the discounts collection
+                    foreignField: "productId",    // Match using the productId from the inventory collection
+                    as: "inventoryDetails"        // Store the matched inventory details
+                  }
+                },
+                // Transform inventoryDetails from an array into a single object for easier access
+                { $unwind: "$inventoryDetails" },
+          
+                // Select and structure the fields we want to include in the final result
+                {
+                  $project: {
+                    _id: 0,                       // Exclude the default MongoDB ID field
+                    productId: 1,                 // Include the product ID
+                    productName: "$productDetails.name", // Include the product name from the product details
+                    discountPercentage: 1,        // Include the discount percentage
+                    discountStartDate: "$startDate",  // Include the discount start date
+                    discountEndDate: "$endDate",      // Include the discount end date
+                    stock: "$inventoryDetails.stock", // Include the stock level
+                    branch: "$inventoryDetails.branch" // Include the branch name
+                  }
+                },
+          
+                // Sort the final results by the highest discount percentage first
+                { $sort: { discountPercentage: -1 } }
+              ]).toArray();
+          
+              // Print the fetched results to the console
+              console.log("Discounted Products Details:", result);
+          
+          
       
   
 
