@@ -667,10 +667,69 @@ async function createOrders() {
 }
 
 
+// async function prepareInventoryData() {
+//   try {
+//     // Connect to the database
+//     const db = await connectToDatabase();
+
+//     // Fetch product IDs along with their corresponding branches
+//     const productBranches = await db.collection("products").aggregate([
+//       {
+//         $project: {
+//           productId: 1,  // Include productId
+//           branch: 1,     // Include branches where product is available
+//           _id: 0         // Exclude the MongoDB default _id field
+//         }
+//       }
+//     ]).toArray();
+
+//     // Function to generate a random date between the given start and end dates
+//     function generateRandomDate(start, end) {
+//       const randomTime = start.getTime() + Math.random() * (end.getTime() - start.getTime());
+//       return new Date(randomTime); // Convert random time to a Date object
+//     }
+
+//     // Define the range for the random dates (last 6 months)
+//     const sixMonthsAgo = new Date();
+//     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);  // 6 months ago
+//     const currentDate = new Date(); // Current date
+
+//     // Prepare the inventory data by combining product ID and branch with stock levels and random update dates
+//     const inventoryData = productBranches.flatMap(({ productId, branch }) => {
+//       return branch.map(branchName => ({
+//         productId,              // Product ID
+//         branch: branchName,     // Branch name where the product is available
+//         stock: Math.floor(Math.random() * 91) + 10,  // Random stock count between 10 and 100
+//         lastUpdated: generateRandomDate(sixMonthsAgo, currentDate) // Random date within the last 6 months
+//       }));
+//     });
+
+//     // Log the prepared inventory data for verification
+//     console.log("Prepared Inventory Data:", inventoryData);
+
+//     // Insert the generated inventory data into the "inventory" collection
+//     const result = await db.collection("inventory").insertMany(inventoryData);
+
+//     // Log success message showing how many records were inserted
+//     console.log(`${result.insertedCount} inventory records inserted successfully.`);
+//   } catch (error) {
+//     // Handle any errors that occur during the process
+//     console.error("Error preparing inventory data:", error.message);
+//   }
+// }
+
+
 async function prepareInventoryData() {
   try {
     // Connect to the database
     const db = await connectToDatabase();
+
+    // Check if the inventory collection already has data
+    const existingCount = await db.collection("inventory").countDocuments();
+    if (existingCount > 0) {
+      console.log("Inventory collection already has data. No new records inserted.");
+      return;
+    }
 
     // Fetch product IDs along with their corresponding branches
     const productBranches = await db.collection("products").aggregate([
@@ -717,7 +776,6 @@ async function prepareInventoryData() {
     console.error("Error preparing inventory data:", error.message);
   }
 }
-
 
 
 async function createCustomerReview() {
@@ -783,6 +841,63 @@ async function createCustomerReview() {
 
 
 
+// Function to generate a random date within the past month
+function getRandomDateWithinLastMonth() {
+  const today = new Date();
+  const pastMonth = new Date(today);
+  pastMonth.setMonth(today.getMonth() - 1);
+  
+  const randomDate = new Date(
+    pastMonth.getTime() + Math.random() * (today.getTime() - pastMonth.getTime())
+  );
+
+  return randomDate.toISOString().split("T")[0]; // Return in YYYY-MM-DD format
+}
+
+async function createWishlistCollection() {
+  try {
+    // Step 1: Connect to the database
+    const db = await connectToDatabase();
+    const wishlistCount = await db.collection("wishlist").countDocuments();
+    if (wishlistCount > 0) {
+      console.log("Wishlist collection already contains data. No new records inserted.");
+      return;
+    }
+    // Step 2: Fetch valid customers and products
+    const customers = await db.collection("customer").find({}, { projection: { customerId: 1, _id: 0 } }).toArray();
+    const products = await db.collection("products").find({}, { projection: { productId: 1, _id: 0 } }).toArray();
+
+    const customerIds = customers.map(customer => customer.customerId);
+    const productIds = products.map(product => product.productId);
+
+    // Step 3: Generate wishlist data for customers
+    const wishlistData = customerIds.map(customerId => {
+      // Assign a random selection of products to each customer
+      const randomProducts = productIds
+        .sort(() => Math.random() - 0.5) // Shuffle products
+        .slice(0, Math.floor(Math.random() * 5) + 1); // Pick 1-5 products
+
+      return {
+        wishlistId: `W${Math.floor(Math.random() * 10000)}`, // Generate a random wishlistId
+        customerId: customerId,
+        products: randomProducts.map(productId => ({
+          productId: productId,
+          addedDate: getRandomDateWithinLastMonth() // Assign a random date within the last month
+        }))
+      };
+    });
+
+    // Step 4: Insert the wishlist data into the database
+    const result = await db.collection("wishlist").insertMany(wishlistData);
+    console.log(`${result.insertedCount} wishlists inserted successfully!`);
+  } catch (error) {
+    console.error("Error creating wishlist collection:", error.message);
+  }
+}
+
+
+
+
 
 createProducts();
 createBranch();
@@ -791,3 +906,4 @@ createOrders();
 
 prepareInventoryData();
 createCustomerReview();
+createWishlistCollection();
